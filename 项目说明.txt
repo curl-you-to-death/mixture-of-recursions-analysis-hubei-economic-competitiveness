@@ -1,3 +1,5 @@
+环境：适配python3.10版本的anaconda
+
 前端运行仅需：
 mor.py
 model_compare.py
@@ -5,7 +7,7 @@ attention_layers.py
 num_of_indicators.py
 ratio_input.py
 app.py
-index.html
+index.html（放到新建的templates文件夹中）
 且控制台能展示训练过程，但是需将训练全部完成才能在前端显示。
 
 以console_开头的对应文件缺少前端接口函数，但有完整注释，也能在控制台能展示训练过程。
@@ -13,11 +15,3 @@ index.html
 原始数据的Min-Max归一化和熵权法计算综合竞争力得分使用excel自带函数完成，函数表达式可在.xlsx文件的f(x)里查看。
 
 答辩后得知还是表格呈现更为直观，前端不用了。
-
-
-
-
-
-
-
-
