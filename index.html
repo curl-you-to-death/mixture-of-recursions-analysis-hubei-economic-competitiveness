@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MoR模型预测系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+        html, body {
+            height: 100%;
+            background: #f8f9fa;
+        }
+        .page {
+            display: flex;
+            height: 100vh;
+        }
+        .sidebar {
+            width: 240px;
+            background: #2f4050;
+            padding: 20px 0;
+        }
+        .tab-btn {
+            display: block;
+            width: 100%;
+            padding: 14px 20px;
+            background: transparent;
+            color: #a7b1c2;
+            border: none;
+            text-align: left;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            background: #23b7e5;
+            color: white;
+        }
+        .tab-btn:hover {
+            background: #35495d;
+            color: white;
+        }
+        .content {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+        }
+        .panel {
+            display: none;
+        }
+        .panel.active {
+            display: block;
+        }
+        .title {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: #2f4050;
+            font-weight: 600;
+        }
+        #chart { width: 100%; height: 700px; margin-top: 20px; }
+        #attnChart { width: 100%; height: 700px; margin-top: 20px; }
+        #dimChart { width: 100%; height: 700px; margin-top: 20px; }
+        #ratioChart { width: 100%; height: 700px; margin-top: 20px; }
+        table { font-size: 15px; }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="sidebar">
+            <button class="tab-btn active" data-target="mor">MoR模型预测</button>
+            <button class="tab-btn" data-target="compare">3种模型对比</button>
+            <button class="tab-btn" data-target="attention">注意力层数对比</button>
+            <button class="tab-btn" data-target="dimension">输入指标维度对比</button>
+            <button class="tab-btn" data-target="ratio">输入比例调整分析</button>
+        </div>
+
+        <div class="content">
+            <!-- MoR -->
+            <div class="panel active" id="mor">
+                <h2 class="title">湖北省18地区经济竞争力预测</h2>
+                <table class="table table-hover table-striped text-center align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>地区名称</th>
+                            <th>MoR预测得分（4位小数）</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for i in range(regions|length) %}
+                        <tr>
+                            <td>{{ regions[i] }}</td>
+                            <td><strong>{{ "%.4f"|format(mor_scores[i]) }}</strong></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 3种模型对比 -->
+            <div class="panel" id="compare">
+                <h2 class="title">RNN/LSTM/MoR模型20轮训练平均评价指标对比</h2>
+                <div id="chart"></div>
+            </div>
+
+            <!-- 注意力层数 -->
+            <div class="panel" id="attention">
+                <h2 class="title">注意力层数 1/2/3 层20轮训练平均评价指标对比</h2>
+                <div id="attnChart"></div>
+            </div>
+
+            <!-- 输入指标维度 -->
+            <div class="panel" id="dimension">
+                <h2 class="title">输入指标6维度20轮训练平均评价指标对比</h2>
+                <div id="dimChart"></div>
+            </div>
+
+            <!-- 输入比例调整（新增） -->
+            <div class="panel" id="ratio">
+                <h2 class="title">输入比例调整20轮训练平均评价指标分析</h2>
+                <div id="ratioChart"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let myChart = null;
+        let attnChart = null;
+        let dimChart = null;
+        let ratioChart = null;
+
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabPanels = document.querySelectorAll('.panel');
+
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', function () {
+                tabBtns.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                const target = this.getAttribute('data-target');
+                tabPanels.forEach(p => p.classList.remove('active'));
+                document.getElementById(target).classList.add('active');
+
+                if (target === 'compare') renderChart();
+                if (target === 'attention') renderAttnChart();
+                if (target === 'dimension') renderDimChart();
+                if (target === 'ratio') renderRatioChart();
+            });
+        });
+
+        // 3种模型
+        function renderChart() {
+            const chartDom = document.getElementById('chart');
+            if (!myChart) myChart = echarts.init(chartDom);
+            const data = {{ compare|tojson }};
+            const option = {
+                title: { text: 'RNN/LSTM/MoR模型20轮训练平均评价指标对比', left: 'center' },
+                tooltip: { trigger: 'axis', formatter:p=>p[0].name+'<br/>'+p.map(i=>i.seriesName+':'+i.value.toFixed(4)).join('<br/>') },
+                legend: { data: ['RNN','LSTM','MoR'], bottom:0 },
+                xAxis: { type: 'category', data: ['RMSE','MAE','R²'] },
+                yAxis: { type: 'value', min:0, max:1, interval:0.1 },
+                series: [
+                    { name:'RNN', type:'bar', data:[data.rmse[0],data.mae[0],data.r2[0]], itemStyle:{color:'#ff6b6b'}, label:{show:true,formatter:p=>p.value.toFixed(4)} },
+                    { name:'LSTM', type:'bar', data:[data.rmse[1],data.mae[1],data.r2[1]], itemStyle:{color:'#4ecdc4'}, label:{show:true,formatter:p=>p.value.toFixed(4)} },
+                    { name:'MoR', type:'bar', data:[data.rmse[2],data.mae[2],data.r2[2]], itemStyle:{color:'#45b7d1'}, label:{show:true,formatter:p=>p.value.toFixed(4)} }
+                ]
+            };
+            myChart.setOption(option);
+            window.addEventListener('resize', () => myChart.resize());
+        }
+
+        // 注意力层数
+        function renderAttnChart() {
+            const dom = document.getElementById('attnChart');
+            if (!attnChart) attnChart = echarts.init(dom);
+            const attn = {{ attn_data|tojson }};
+            const option = {
+                title: { text: '注意力层数 1/2/3 层20轮训练平均评价指标对比', left: 'center' },
+                tooltip: { trigger: 'axis', formatter:p=>p[0].name+'<br/>'+p.map(i=>i.seriesName+':'+i.value.toFixed(4)).join('<br/>') },
+                legend: { data: ['RMSE','MAE','R²'], bottom:0 },
+                xAxis: { type: 'category', data: ['1层','2层','3层'] },
+                yAxis: { type: 'value', min:0, max:1, interval:0.1 },
+                series: [
+                    { name:'RMSE', type:'bar', data:[attn.layer1.rmse,attn.layer2.rmse,attn.layer3.rmse], itemStyle:{color:'#ff6b6b'}, label:{show:true,formatter:p=>p.value.toFixed(4)} },
+                    { name:'MAE', type:'bar', data:[attn.layer1.mae,attn.layer2.mae,attn.layer3.mae], itemStyle:{color:'#4ecdc4'}, label:{show:true,formatter:p=>p.value.toFixed(4)} },
+                    { name:'R²', type:'bar', data:[attn.layer1.r2,attn.layer2.r2,attn.layer3.r2], itemStyle:{color:'#45b7d1'}, label:{show:true,formatter:p=>p.value.toFixed(4)} }
+                ]
+            };
+            attnChart.setOption(option);
+            window.addEventListener('resize', () => attnChart.resize());
+        }
+
+        // 维度对比
+        function renderDimChart() {
+            const dom = document.getElementById('dimChart');
+            if (!dimChart) dimChart = echarts.init(dom);
+            const dim = {{ dim_data|tojson }};
+            const names = Object.keys(dim);
+            const option = {
+                title: { text: '输入指标6维度20轮训练平均评价指标对比', left: 'center' },
+                tooltip: { trigger: 'axis', formatter:p=>p[0].name+'<br/>'+p.map(i=>i.seriesName+':'+i.value.toFixed(4)).join('<br/>') },
+                legend: { data: ['RMSE','MAE','R²'], bottom:0 },
+                xAxis: { type: 'category', data: names },
+                yAxis: { type: 'value', min:0, max:1, interval:0.1 },
+                series: [
+                    { name:'RMSE', type:'bar', data:names.map(i=>dim[i].rmse), itemStyle:{color:'#ff6b6b'}, label:{show:true,formatter:p=>p.value.toFixed(4)} },
+                    { name:'MAE', type:'bar', data:names.map(i=>dim[i].mae), itemStyle:{color:'#4ecdc4'}, label:{show:true,formatter:p=>p.value.toFixed(4)} },
+                    { name:'R²', type:'bar', data:names.map(i=>dim[i].r2), itemStyle:{color:'#45b7d1'}, label:{show:true,formatter:p=>p.value.toFixed(4)} }
+                ]
+            };
+            dimChart.setOption(option);
+            window.addEventListener('resize', () => dimChart.resize());
+        }
+
+        // 输入比例调整（新增图表）
+        function renderRatioChart() {
+            const dom = document.getElementById('ratioChart');
+            if (!ratioChart) ratioChart = echarts.init(dom);
+            const r = {{ ratio_data|tojson }};
+            const option = {
+                title: { text: '输入比例调整20轮训练平均评价指标分析', left: 'center' },
+                tooltip: { trigger: 'axis', formatter:p=>p[0].name+': '+p[0].value.toFixed(4) },
+                xAxis: { type: 'category', data: ['RMSE','MAE','R²'] },
+                yAxis: { type: 'value', min:0, max:1, interval:0.1 },
+                series: [
+                    { name:'指标值', type:'bar', data:[r.rmse, r.mae, r.r2],
+                      itemStyle:{color:'#45b7d1'}, label:{show:true,formatter:p=>p.value.toFixed(4)} }
+                ]
+            };
+            ratioChart.setOption(option);
+            window.addEventListener('resize', () => ratioChart.resize());
+        }
+    </script>
+</body>
+</html>
